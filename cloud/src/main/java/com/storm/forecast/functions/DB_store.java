@@ -209,11 +209,61 @@ public class DB_store {
     }
 }
 
-class DeviceData2DB extends Thread {
-}
+class HouseDataForecast2DB extends Thread {
+    private Stack<HouseData> dataList;
+    private File locker;
+    private String version;
 
-class HouseholdData2DB extends Thread {
-}
+    public HouseDataForecast2DB(String version, Stack<HouseData> dataList, File locker) {
+        this.version = version;
+        this.dataList = dataList;
+        this.locker = locker;
+    }
 
-class HouseData2DB extends Thread {
+    @Override
+    public void run() {
+        try {
+            locker.createNewFile();
+            locker.deleteOnExit();
+            // Init connection
+            Connection conn = DB_store.initConnection(false);
+            // Init SQL
+            Long start = System.currentTimeMillis();
+            PreparedStatement tempSql = conn.prepareStatement(
+                        "insert into house_data_forecast_"+ version +" (house_id,year,month,day,slice_gap,slice_index,avg) values (?,?,?,?,?,?,?) on duplicate key update avg=VALUES(avg)");
+            for (HouseData data : dataList) {
+                tempSql.setInt(1, data.getHouseId());
+                tempSql.setString(2, data.getYear());
+                tempSql.setString(3, data.getMonth());
+                tempSql.setString(4, data.getDay());
+                tempSql.setInt(5, data.getGap());
+                tempSql.setInt(6, data.getIndex());
+                tempSql.setDouble(7, data.getValue());
+                tempSql.addBatch();
+                // String statementText = tempSql.toString();
+                // sql += statementText.substring(statementText.slice_indexOf(": ") + 2) + ",";
+            }
+            // sql = sql.substring(0, sql.length() - 1) + "";
+            // stmt.executeUpdate(sql);
+            tempSql.executeBatch();
+            conn.commit();
+            conn.close();
+            locker.delete();
+            System.out.printf("\n[" + locker.getName() + "] DB tooks %.2f s ("+ dataList.size() +" queries)\n",
+                    (float) (System.currentTimeMillis() - start) / 1000);
+
+            dataList = null;
+        } catch (Exception ex) {
+            try {
+                System.out.printf("\n[%s] Wait for 10s then try again", locker.getName());
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            locker.delete();
+            new HouseDataForecast2DB(version, dataList, locker).start();
+            ex.printStackTrace();
+        }
+    }
 }
