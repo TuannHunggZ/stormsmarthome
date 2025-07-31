@@ -30,6 +30,20 @@ public class ForecastController {
         HashMap<String, HouseData> houseDataForecast = forecast((HashMap<String, HouseData>) request.getHouseData());
         Stack<HouseData> tempHouseDataForecast = new Stack<HouseData>();
         tempHouseDataForecast.addAll(houseDataForecast.values());
+        if(DB_store.pushHouseDataForecast("v0", tempHouseDataForecast, new File("./tmp/houseDataForecast2db-" + gap + ".lck"))){
+            for(String key : houseDataForecast.keySet()){
+                houseDataList.remove(key);
+            }
+            //Log HouseData
+            logs.add(String.format("[Bolt_forecast_%d] HouseData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
+            logs.add(String.format("[Bolt_forecast_%d] HouseData Total: %-10d | Saved and clean: %-10d\n", gap, houseDataList.size(), tempHouseDataForecast.size()));
+            //Cleanning
+            houseDataForecast = null;
+            tempHouseDataForecast = null;
+        }
+        else {
+            logs.add(String.format("[Bolt_forecast_%d] HouseData forecast not saved\n", gap));
+        }
 
         start = System.currentTimeMillis();
         HashMap<String, HouseholdData> householdDataForecast = forecast((HashMap<String, HouseholdData>) request.getHouseholdData());
