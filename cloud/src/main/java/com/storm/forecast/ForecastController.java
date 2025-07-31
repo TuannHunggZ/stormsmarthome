@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Stack;
 import java.sql.*;
 import com.storm.forecast.models.*;
 import com.storm.forecast.functions.*;
@@ -30,11 +31,16 @@ public class ForecastController {
         Stack<HouseData> tempHouseDataForecast = new Stack<HouseData>();
         tempHouseDataForecast.addAll(houseDataForecast.values());
 
+        start = System.currentTimeMillis();
         HashMap<String, HouseholdData> householdDataForecast = forecast((HashMap<String, HouseholdData>) request.getHouseholdData());
-        HashMap<String, DeviceData> deviceDataForecast = forecast((HashMap<String, DeviceData>) request.getDeviceData());
-
+        Stack<HouseholdData> tempHouseholdDataForecast = new Stack<HouseholdData>();
+        tempHouseholdDataForecast.addAll(householdDataForecast.values());
         
-
+        start = System.currentTimeMillis();
+        HashMap<String, DeviceData> deviceDataForecast = forecast((HashMap<String, DeviceData>) request.getDeviceData());
+        Stack<DeviceData> tempDeviceDataForecast = new Stack<DeviceData>();
+        tempDeviceDataForecast.addAll(deviceDataForecast.values());
+        
         return ResponseEntity.ok(Map.of("message", "Data received and logged successfully"));
     }
 
