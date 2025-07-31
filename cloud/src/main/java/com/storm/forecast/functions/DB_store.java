@@ -208,3 +208,12 @@ public class DB_store {
         return result;
     }
 }
+
+class DeviceData2DB extends Thread {
+}
+
+class HouseholdData2DB extends Thread {
+}
+
+class HouseData2DB extends Thread {
+}
