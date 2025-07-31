@@ -322,3 +322,59 @@ class HouseholdDataForecast2DB extends Thread {
         }
     }
 }
+
+class DeviceDataForecast2DB extends Thread {
+    private Stack<DeviceData> dataList;
+    private File locker;
+    private String version;
+
+    public DeviceDataForecast2DB(String version, Stack<DeviceData> dataList, File locker) {
+        this.version = version;
+        this.dataList = dataList;
+        this.locker = locker;
+    }
+
+    @Override
+    public void run() {
+        try {
+            locker.createNewFile();
+            locker.deleteOnExit();
+            // Init connection
+            Connection conn = DB_store.initConnection(false);
+            // Init SQL
+            Long start = System.currentTimeMillis();
+            PreparedStatement tempSql = conn.prepareStatement(
+                        "insert into device_data_forecast_"+ version +" (house_id,household_id,device_id,year,month,day,slice_gap,slice_index,avg) values (?,?,?,?,?,?,?,?,?) on duplicate key update avg=VALUES(avg)");
+            for (DeviceData data : dataList) {
+                tempSql.setInt(1, data.getHouseId());
+                tempSql.setInt(2, data.getHouseholdId());
+                tempSql.setInt(3, data.getDeviceId());
+                tempSql.setString(4, data.getYear());
+                tempSql.setString(5, data.getMonth());
+                tempSql.setString(6, data.getDay());
+                tempSql.setInt(7, data.getGap());
+                tempSql.setInt(8, data.getIndex());
+                tempSql.setDouble(9, data.getAvg());
+                tempSql.addBatch();
+            }
+            tempSql.executeBatch();
+            conn.commit();
+            System.out.printf("\n[" + locker.getName() + "] DB tooks %.2f s ("+ dataList.size() +" queries)\n",
+                    (float) (System.currentTimeMillis() - start) / 1000);
+            conn.close();
+            locker.delete();
+            dataList = null;
+        } catch (Exception ex) {
+            try {
+                System.out.printf("\n[%s] Wait for 10s then try again", locker.getName());
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            locker.delete();
+            new DeviceDataForecast2DB(version, dataList, locker).start();
+            ex.printStackTrace();
+        }
+    }
+}
