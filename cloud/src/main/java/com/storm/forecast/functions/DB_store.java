@@ -207,6 +207,48 @@ public class DB_store {
         }
         return result;
     }
+
+    public static boolean pushHouseDataForecast(String version, Stack<HouseData> dataList, File locker) {
+        try {
+            if (locker.exists() || dataList.isEmpty()) {
+                return false;
+            } else {
+                new HouseDataForecast2DB(version, dataList, locker).start();
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static boolean pushHouseholdDataForecast(String version, Stack<HouseholdData> dataList, File locker) {
+        try {
+            if (locker.exists() || dataList.isEmpty()) {
+                return false;
+            } else {
+                new HouseholdDataForecast2DB(version, dataList, locker).start();
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static boolean pushDeviceDataForecast(String version, Stack<DeviceData> dataList, File locker) {
+        try {
+            if (locker.exists() || dataList.isEmpty()) {
+                return false;
+            } else {
+                new DeviceDataForecast2DB(version, dataList, locker).start();
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 }
 
 class HouseDataForecast2DB extends Thread {
