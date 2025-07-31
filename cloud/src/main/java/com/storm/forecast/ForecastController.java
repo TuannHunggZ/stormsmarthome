@@ -26,7 +26,7 @@ public class ForecastController {
             return ResponseEntity.badRequest().body(Map.of("error", "Missing required data fields"));
         }
 
-        int gap = request.getGap()
+        int gap = request.getGap();
         Stack<String> logs = new Stack<String>();
 
         Long start = System.currentTimeMillis();
