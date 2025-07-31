@@ -7,6 +7,7 @@ public class ForecastRequest {
     private HashMap<String, HouseData> houseData;
     private HashMap<String, HouseholdData> householdData;
     private HashMap<String, DeviceData> deviceData;
+    private int gap;
 
     public HashMap<String, HouseData> getHouseData() {
         return houseData;
@@ -30,5 +31,13 @@ public class ForecastRequest {
 
     public void setDeviceData(HashMap<String, DeviceData> deviceData) {
         this.deviceData = deviceData;
+    }
+
+    public int getGap() {
+        return gap;
+    }
+
+    public void setGap(int gap) {
+        this.gap = gap;
     }
 }
