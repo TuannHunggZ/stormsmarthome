@@ -1,0 +1,4 @@
+db_url: "localhost:3306"
+db_name: "iotdata"
+db_user: "user1"
+db_pass: "Uet123"
