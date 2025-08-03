@@ -27,16 +27,19 @@ public class ForecastController {
         }
 
         int gap = request.getGap();
+        HashMap<String,HouseData> houseDataList = request.getHouseData();
+        HashMap<String,HouseholdData> householdDataList = request.getHouseholdData();
+        HashMap<String,DeviceData> deviceDataList = request.getDeviceData();
         Stack<String> logs = new Stack<String>();
 
         Long start = System.currentTimeMillis();
-        HashMap<String, HouseData> houseDataForecast = forecast((HashMap<String, HouseData>) request.getHouseData());
+        HashMap<String, HouseData> houseDataForecast = forecast(houseDataList);
         Stack<HouseData> tempHouseDataForecast = new Stack<HouseData>();
         tempHouseDataForecast.addAll(houseDataForecast.values());
         if(DB_store.pushHouseDataForecast("v0", tempHouseDataForecast, new File("./tmp/houseDataForecast2db-" + gap + ".lck"))){
-            // for(String key : houseDataForecast.keySet()){
-            //     houseDataList.remove(key);
-            // }
+            for(String key : houseDataForecast.keySet()){
+                houseDataList.remove(key);
+            }
             //Log HouseData
             logs.add(String.format("[Bolt_forecast_%d] HouseData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
             logs.add(String.format("[Bolt_forecast_%d] HouseData Total: %-10d | Saved and clean: %-10d\n", gap, houseDataList.size(), tempHouseDataForecast.size()));
@@ -49,14 +52,42 @@ public class ForecastController {
         }
 
         start = System.currentTimeMillis();
-        HashMap<String, HouseholdData> householdDataForecast = forecast((HashMap<String, HouseholdData>) request.getHouseholdData());
+        HashMap<String, HouseholdData> householdDataForecast = forecast(householdDataList);
         Stack<HouseholdData> tempHouseholdDataForecast = new Stack<HouseholdData>();
         tempHouseholdDataForecast.addAll(householdDataForecast.values());
+        if(DB_store.pushHouseholdDataForecast("v0", tempHouseholdDataForecast, new File("./tmp/householdDataForecast2db-" + gap + ".lck"))){
+            for(String key : householdDataForecast.keySet()){
+                householdDataList.remove(key);
+            }
+            //Log HouseholdData
+            logs.add(String.format("[Bolt_forecast_%d] HouseholdData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
+            logs.add(String.format("[Bolt_forecast_%d] HouseholdData Total: %-10d | Saved and clean: %-10d\n", gap, householdDataList.size(), tempHouseholdDataForecast.size()));
+            //Cleaning
+            householdDataForecast = null;
+            tempHouseholdDataForecast = null;
+        }
+        else {
+            logs.add(String.format("[Bolt_forecast_%d] HouseholdData forecast not saved\n", gap));
+        }
         
         start = System.currentTimeMillis();
         HashMap<String, DeviceData> deviceDataForecast = forecast((HashMap<String, DeviceData>) request.getDeviceData());
         Stack<DeviceData> tempDeviceDataForecast = new Stack<DeviceData>();
         tempDeviceDataForecast.addAll(deviceDataForecast.values());
+        if(DB_store.pushDeviceDataForecast("v0", tempDeviceDataForecast, new File("./tmp/deviceDataForecast2db-" + gap + ".lck"))){
+            for(String key : deviceDataForecast.keySet()){
+                deviceDataList.remove(key);
+            }
+            //Log HouseData
+            logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
+            logs.add(String.format("[Bolt_forecast_%d] DeviceData Total: %-10d | Saved and clean: %-10d\n", gap, deviceDataList.size(), tempDeviceDataForecast.size()));
+            //Cleaning
+            deviceDataForecast = null;
+            tempDeviceDataForecast = null;
+        }
+        else {
+            logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast not saved\n", gap));
+        }
         
         return ResponseEntity.ok(Map.of("message", "Data received and logged successfully"));
     }
