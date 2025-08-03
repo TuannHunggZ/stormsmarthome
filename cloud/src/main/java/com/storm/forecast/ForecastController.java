@@ -89,8 +89,22 @@ public class ForecastController {
             logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast not saved\n", gap));
         }
 
+        MQTT_publisher.stormLogPublish(logs, config.getNotificationBrokerURL(), config.getMqttTopicPrefix(), new File("./tmp/bolt-forecast-"+ gap +"-log-publish.lck"));
         for(String data : logs){
             System.out.println(data);
+        }
+        try {
+            FileWriter log = new FileWriter(new File("./tmp/bolt_forecast_"+ gap +".tmp"), false);
+            PrintWriter pwOb = new PrintWriter(log , false);
+            pwOb.flush();
+            for(String data : logs){
+                log.write(data);
+            }
+            pwOb.close();
+            log.close();
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
         }
         
         return ResponseEntity.ok(Map.of("message", "Data received and logged successfully"));

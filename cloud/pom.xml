@@ -37,9 +37,9 @@
 		
 		<!-- https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-starter-web -->
 		<dependency>
-    			<groupId>org.springframework.boot</groupId>
-    			<artifactId>spring-boot-starter-web</artifactId>
-    			<version>3.5.0</version>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+			<version>3.5.0</version>
 		</dependency>
 
 		<dependency>
@@ -48,16 +48,21 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-            		<groupId>org.yaml</groupId>
-            		<artifactId>snakeyaml</artifactId>
-            		<version>1.26</version>
-            		<scope>compile</scope>
-        	</dependency>
-        	<dependency>
-            		<groupId>mysql</groupId>
-            		<artifactId>mysql-connector-java</artifactId>
-            		<version>8.0.22</version>
-        	</dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+			<version>1.26</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>mysql</groupId>
+			<artifactId>mysql-connector-java</artifactId>
+			<version>8.0.22</version>
+		</dependency>
+		<dependency>
+            <groupId>org.eclipse.paho</groupId>
+            <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+            <version>1.2.2</version>
+        </dependency>
 	</dependencies>
 
 	<build>
