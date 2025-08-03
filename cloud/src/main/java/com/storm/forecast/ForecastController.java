@@ -88,6 +88,10 @@ public class ForecastController {
         else {
             logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast not saved\n", gap));
         }
+
+        for(String data : logs){
+            System.out.println(data);
+        }
         
         return ResponseEntity.ok(Map.of("message", "Data received and logged successfully"));
     }
