@@ -8,6 +8,8 @@ public class ForecastRequest {
     private HashMap<String, HouseholdData> householdData;
     private HashMap<String, DeviceData> deviceData;
     private int gap;
+    private String notificationBrokerURL;
+    private String mqttTopicPrefix;
 
     public HashMap<String, HouseData> getHouseData() {
         return houseData;
@@ -39,5 +41,21 @@ public class ForecastRequest {
 
     public void setGap(int gap) {
         this.gap = gap;
+    }
+
+    public String getNotificationBrokerURL() {
+        return notificationBrokerURL;
+    }
+
+    public void setNotificationBrokerURL(String notificationBrokerURL) {
+        this.notificationBrokerURL = notificationBrokerURL;
+    }
+
+    public String getMqttTopicPrefix() {
+        return mqttTopicPrefix;
+    }
+
+    public void setMqttTopicPrefix(String mqttTopicPrefix) {
+        this.mqttTopicPrefix = mqttTopicPrefix;
     }
 }

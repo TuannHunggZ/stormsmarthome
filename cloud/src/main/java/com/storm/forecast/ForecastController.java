@@ -27,6 +27,8 @@ public class ForecastController {
         }
 
         int gap = request.getGap();
+        String brokerURL = request.getNotificationBrokerURL();
+        String topicPrefix = request.getMqttTopicPrefix();
         HashMap<String,HouseData> houseDataList = request.getHouseData();
         HashMap<String,HouseholdData> householdDataList = request.getHouseholdData();
         HashMap<String,DeviceData> deviceDataList = request.getDeviceData();
@@ -89,7 +91,7 @@ public class ForecastController {
             logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast not saved\n", gap));
         }
 
-        MQTT_publisher.stormLogPublish(logs, config.getNotificationBrokerURL(), config.getMqttTopicPrefix(), new File("./tmp/bolt-forecast-"+ gap +"-log-publish.lck"));
+        MQTT_publisher.stormLogPublish(logs, brokerURL, topicPrefix, new File("./tmp/bolt-forecast-"+ gap +"-log-publish.lck"));
         for(String data : logs){
             System.out.println(data);
         }
