@@ -109,7 +109,12 @@ public class ForecastController {
             e.printStackTrace();
         }
         
-        return ResponseEntity.ok(Map.of("message", "Data received and logged successfully"));
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Data received and processed successfully");
+        response.put("remainingHouseData", houseDataList);
+        response.put("remainingHouseholdData", householdDataList);
+        response.put("remainingDeviceData", deviceDataList);
+        return ResponseEntity.ok(response);
     }
 
     public static <E> HashMap<String, E> forecast(HashMap<String,E> inputData){
