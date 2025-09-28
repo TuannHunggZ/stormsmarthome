@@ -15,7 +15,9 @@ services:
 
   backend:
     image: backend
-    build: ./Dockerfile
+    build: .
     container_name: backend
     extra_hosts:
       - "mqtt-broker:192.168.1.6"
+volumes:
+  mysql_data:
