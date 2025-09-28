@@ -5,7 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.HttpURLConnection;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
@@ -15,16 +14,24 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.lang.reflect.Type;
 
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
 import org.apache.storm.topology.base.BaseRichBolt;
 import org.apache.storm.tuple.Tuple;
+
 import com.storm.iotdata.functions.DB_store;
 import com.storm.iotdata.functions.MQTT_publisher;
 import com.storm.iotdata.models.*;
+
 import com.google.gson.JsonObject;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 
 public class Bolt_forecast extends BaseRichBolt {
     private StormConfig config;
@@ -51,125 +58,10 @@ public class Bolt_forecast extends BaseRichBolt {
     @Override
     public void execute(Tuple input) {
         try{
-            if(input.getSourceStreamId().equals("trigger")){
-                try {
-                    com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
-                    
-                    PrintStream fileOut = new PrintStream("/apache-storm/output.txt");
-                    
-                    // fileOut.println("========= HouseData (JSON Format) =========");
-                    // fileOut.println(gson.toJson(houseDataList));
-                    
-                    // fileOut.println("\n========= HouseholdData (JSON Format) =========");
-                    // fileOut.println(gson.toJson(householdDataList));
-                    
-                    // fileOut.println("\n========= DeviceData (JSON Format) =========");
-                    // fileOut.println(gson.toJson(deviceDataList));
-
-		    String currentDirectory = new File("").getAbsolutePath();
-		    fileOut.println("Thư mục hiện tại: " + currentDirectory);
-		    fileOut.println("Config: " + config.getNotificationBrokerURL() + " " + config.getMqttTopicPrefix());
-
-                    String houseJson = gson.toJson(houseDataList);
-                    String householdJson = gson.toJson(householdDataList);
-                    String deviceJson = gson.toJson(deviceDataList);
-
-                    JsonObject payload = new JsonObject();
-		    payload.addProperty("gap", gap);
-                    payload.add("houseData", gson.toJsonTree(houseDataList));
-                    payload.add("householdData", gson.toJsonTree(householdDataList));
-                    payload.add("deviceData", gson.toJsonTree(deviceDataList));
-		    payload.addProperty("notificationBrokerURL", config.getNotificationBrokerURL());
-		    payload.addProperty("mqttTopicPrefix", config.getMqttTopicPrefix());
-
-                    sendForecastToBackend("http://mysql:8080/forecast", payload);
-
-                    // fileOut.println(payload);
-                    
-                    fileOut.close();
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                }
-
-                Stack<String> logs = new Stack<String>();
-                //Start forecast
-                Long start = System.currentTimeMillis();
-                HashMap<String, HouseData> houseDataForecast= forecast(houseDataList);
-                Stack<HouseData> tempHouseDataForecast = new Stack<HouseData>();
-                tempHouseDataForecast.addAll(houseDataForecast.values());
-                if(DB_store.pushHouseDataForecast("v0", tempHouseDataForecast, new File("./tmp/houseDataForecast2db-" + gap + ".lck"))){
-                    for(String key : houseDataForecast.keySet()){
-                        houseDataList.remove(key);
-                    }
-                    //Log HouseData
-                    logs.add(String.format("[Bolt_forecast_%d] HouseData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
-                    logs.add(String.format("[Bolt_forecast_%d] HouseData Total: %-10d | Saved and clean: %-10d\n", gap, houseDataList.size(), tempHouseDataForecast.size()));
-                    //Cleanning
-                    houseDataForecast = null;
-                    tempHouseDataForecast = null;
-                }
-                else {
-                    logs.add(String.format("[Bolt_forecast_%d] HouseData forecast not saved\n", gap));
-                }
-
-                start = System.currentTimeMillis();
-                HashMap<String, HouseholdData> householdDataForecast = forecast(householdDataList);
-                Stack<HouseholdData> tempHouseholdDataForecast = new Stack<HouseholdData>();
-                tempHouseholdDataForecast.addAll(householdDataForecast.values());
-                if(DB_store.pushHouseholdDataForecast("v0", tempHouseholdDataForecast, new File("./tmp/householdDataForecast2db-" + gap + ".lck"))){
-                    for(String key : householdDataForecast.keySet()){
-                        householdDataList.remove(key);
-                    }
-                    //Log HouseholdData
-                    logs.add(String.format("[Bolt_forecast_%d] HouseholdData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
-                    logs.add(String.format("[Bolt_forecast_%d] HouseholdData Total: %-10d | Saved and clean: %-10d\n", gap, householdDataList.size(), tempHouseholdDataForecast.size()));
-                    //Cleaning
-                    householdDataForecast = null;
-                    tempHouseholdDataForecast = null;
-                }
-                else {
-                    logs.add(String.format("[Bolt_forecast_%d] HouseholdData forecast not saved\n", gap));
-                }
-
-                HashMap<String, DeviceData> deviceDataForecast = forecast(deviceDataList);
-                Stack<DeviceData> tempDeviceDataForecast = new Stack<DeviceData>();
-                tempDeviceDataForecast.addAll(deviceDataForecast.values());
-                if(DB_store.pushDeviceDataForecast("v0", tempDeviceDataForecast, new File("./tmp/deviceDataForecast2db-" + gap + ".lck"))){
-                    for(String key : deviceDataForecast.keySet()){
-                        deviceDataList.remove(key);
-                    }
-                    //Log HouseData
-                    logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast took %.2fs\n", gap, (float)(System.currentTimeMillis()-start)/1000));
-                    logs.add(String.format("[Bolt_forecast_%d] DeviceData Total: %-10d | Saved and clean: %-10d\n", gap, deviceDataList.size(), tempDeviceDataForecast.size()));
-                    //Cleaning
-                    deviceDataForecast = null;
-                    tempDeviceDataForecast = null;
-                }
-                else {
-                    logs.add(String.format("[Bolt_forecast_%d] DeviceData forecast not saved\n", gap));
-                }
-
-                MQTT_publisher.stormLogPublish(logs, config.getNotificationBrokerURL(), config.getMqttTopicPrefix(), new File("./tmp/bolt-forecast-"+ gap +"-log-publish.lck"));
-                for(String data : logs){
-                    System.out.println(data);
-                }
-                try {
-                    FileWriter log = new FileWriter(new File("./tmp/bolt_forecast_"+ gap +".tmp"), false);
-                    PrintWriter pwOb = new PrintWriter(log , false);
-                    pwOb.flush();
-                    for(String data : logs){
-                        log.write(data);
-                    }
-                    pwOb.close();
-                    log.close();
-                } catch (Exception e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
-                }
-
+            if(input.getSourceStreamId().equals("trigger")) {
+                sendForecastToBackend("http://192.168.1.12:8080/forecast");
                 _collector.ack(input);
-            }
-            else if(input.getSourceStreamId().equals("data")){
+            } else if(input.getSourceStreamId().equals("data")) {
                 if(input.getValueByField("type").equals(HouseData.class)){
                     HouseData data = (HouseData) input.getValueByField("data");
                     houseDataList.put(data.getUniqueId(), data);
@@ -188,8 +80,7 @@ public class Bolt_forecast extends BaseRichBolt {
                 else {
                     _collector.fail(input);
                 }
-            }
-            else {
+            } else {
                 _collector.fail(input);
             }
         } catch (Exception ex){
@@ -204,21 +95,83 @@ public class Bolt_forecast extends BaseRichBolt {
 
     }
 
-    public static void sendForecastToBackend(String backendUrl, JsonObject jsonData) {
+    public void sendForecastToBackend(String backendUrl) {
         try {
+            // Create connection
             URL url = new URL(backendUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setDoOutput(true);
 
+            Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+            JsonObject payload = new JsonObject();
+            payload.addProperty("gap", gap);
+            payload.add("houseData", gson.toJsonTree(houseDataList));
+            payload.add("householdData", gson.toJsonTree(householdDataList));
+            payload.add("deviceData", gson.toJsonTree(deviceDataList));
+	        payload.addProperty("notificationBrokerURL", config.getNotificationBrokerURL());
+	        payload.addProperty("mqttTopicPrefix", config.getMqttTopicPrefix());
+
+            // Write payload
             try (OutputStream os = conn.getOutputStream()) {
-                byte[] input = jsonData.toString().getBytes("utf-8");
+                byte[] input = payload.toString().getBytes("utf-8");
                 os.write(input, 0, input.length);
             }
 
-            int code = conn.getResponseCode();
-            System.out.println("Backend response code: " + code);
+            // Read response
+            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                try (BufferedReader br = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "utf-8"))) {
+                    StringBuilder response = new StringBuilder();
+                    String responseLine;
+                    while ((responseLine = br.readLine()) != null) {
+                        response.append(responseLine.trim());
+                    }
+                    
+                    // Parse JSON response
+                    JsonObject jsonResponse = new Gson().fromJson(response.toString(), JsonObject.class);
+                    
+                    // Update local data lists
+                    if (jsonResponse.has("remainingHouseData")) {
+                        Type houseType = new TypeToken<HashMap<String, HouseData>>(){}.getType();
+                        HashMap<String, HouseData> updatedHouseData = new Gson().fromJson(
+                            jsonResponse.get("remainingHouseData"), houseType);
+                        houseDataList.clear();
+                        houseDataList.putAll(updatedHouseData);
+                    }
+                    
+                    if (jsonResponse.has("remainingHouseholdData")) {
+                        Type householdType = new TypeToken<HashMap<String, HouseholdData>>(){}.getType();
+                        HashMap<String, HouseholdData> updatedHouseholdData = new Gson().fromJson(
+                            jsonResponse.get("remainingHouseholdData"), householdType);
+                        householdDataList.clear();
+                        householdDataList.putAll(updatedHouseholdData);
+                    }
+                    
+                    if (jsonResponse.has("remainingDeviceData")) {
+                        Type deviceType = new TypeToken<HashMap<String, DeviceData>>(){}.getType();
+                        HashMap<String, DeviceData> updatedDeviceData = new Gson().fromJson(
+                            jsonResponse.get("remainingDeviceData"), deviceType);
+                        deviceDataList.clear();
+                        deviceDataList.putAll(updatedDeviceData);
+                    }
+                }
+            } else {
+                System.out.println("Backend request failed with code: " + conn.getResponseCode());
+            }
+
+            PrintStream fileOut = new PrintStream("/apache-storm/output.txt");
+	        Gson gson2 = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+            fileOut.println("========= HouseData (JSON Format) =========");
+            fileOut.println(gson2.toJson(houseDataList));
+            
+            fileOut.println("\n========= HouseholdData (JSON Format) =========");
+            fileOut.println(gson2.toJson(householdDataList));
+            
+            fileOut.println("\n========= DeviceData (JSON Format) =========");
+            fileOut.println(gson2.toJson(deviceDataList));
+
 
             conn.disconnect();
         } catch (Exception e) {
