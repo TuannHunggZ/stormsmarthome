@@ -1,0 +1,23 @@
+services:
+  mysql:
+    image: mysql:8.4.2
+    command: --mysql-native-password=ON
+    container_name: mysql
+    networks:
+      storm_network:
+    environment:
+      MYSQL_ROOT_PASSWORD: Uet123
+      MYSQL_DATABASE: iotdata
+      MYSQL_USER: user1
+      MYSQL_PASSWORD: Uet123
+    ports:
+      - 3306:3306
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    image: backend
+    build: ./Dockerfile
+    container_name: backend
+    extra_hosts:
+      - "mysql:192.168.1.6"

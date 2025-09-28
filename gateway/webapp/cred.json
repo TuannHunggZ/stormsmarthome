@@ -1,0 +1,7 @@
+{
+	"db_url": "mysql",
+	"db_port": 3306,
+	"db_user": "user1",
+	"db_pass": "Uet123",
+	"db_name": "iotdata"
+}

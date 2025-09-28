@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <title>IOT_Data</title>
+    <!-- <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"> -->
+    <link rel="stylesheet" href="./static/notifications.css">
+    <link rel="stylesheet" href="./static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <!-- <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.0/socket.io.js"></script>
+    <script src="./static/notifications.js"></script>
+    <script src="./static/iot_main.js"></script>
+    <script src="./static/notification_main.js"></script>
+</head>
+
+<body>
+    <div class="form-row" style="z-index: 100; background-color: white; position: fixed; width: 100%; height: 12vh;">
+        <div class="form-group col-md">
+            <label for="house">Choose a house:</label>
+            <select id="house" class="form-control">
+            </select>
+        </div>
+        <div class="form-group col-md">
+            <label for="household">Choose a household:</label>
+            <select id="household" class="form-control">
+            </select>
+        </div>
+        <div class="form-group col-md">
+            <label for="device">Choose a device:</label>
+            <select id="device" class="form-control">
+            </select>
+        </div>
+        <div class="form-group col-md">
+            <label for="slice_gap">Choose a window size:</label>
+            <select id="slice_gap" class="form-control">
+            </select>
+        </div>
+        <div class="form-group col-md">
+            <label for="version">Time:</label>
+            <select id="day" class="form-control">
+                <option value="*">All month</option>
+            </select>
+        </div>
+        <div class="form-group col-md">
+            <label for="version">Forecast:</label>
+            <select id="version" class="form-control">
+                <option value="">No forecast</option>
+            </select>
+        </div>
+        <div class="form-group col-xl-4">
+            <label>
+                Spout info: 
+                <label id="spout-state"></label>
+                | Update:
+                <label id="spout-last-update"></label>
+            </label>
+            <div class="row">
+                <div class="col">
+                    Speed
+                    <br>
+                    <label id="spout-receive-speed">N/A</label>
+                </div>
+                <div class="col">
+                    Load speed
+                    <br>
+                    <label id="spout-load-speed">N/A</label>
+                </div>
+                <div class="col">
+                    Total
+                    <br>
+                    <label id="spout-receive-total">N/A</label>
+                </div>
+                <div class="col">
+                    Queue
+                    <br>
+                    <label id="spout-queue">N/A</label>
+                </div>
+                <div class="col">
+                    Success
+                    <br>
+                    <label id="spout-success">N/A</label>
+                </div>
+                <div class="col">
+                    Fail
+                    <br>
+                    <label id="spout-fail">N/A</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="form-row" style="padding-top: 12vh">
+        <div class="form-group col-md-9">
+            <div class="chart-container" style="position: fixed; width: 70%;">
+                <canvas id="IOT"></canvas>
+                <div id="loader">
+                    <div class="loader">
+                        <svg viewBox="0 0 80 80">
+                            <circle id="test" cx="40" cy="40" r="32"></circle>
+                        </svg>
+                    </div>
+                    
+                    <div class="loader triangle">
+                        <svg viewBox="0 0 86 80">
+                            <polygon points="43 8 79 72 7 72"></polygon>
+                        </svg>
+                    </div>
+                    
+                    <div class="loader">
+                        <svg viewBox="0 0 80 80">
+                            <rect x="8" y="8" width="64" height="64"></rect>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="form-group col-md-3">
+            <font color="#f66" style="font-size:18px">
+                Count : <label id='datapoint'></label>
+                <br>
+                Mean : <label id='mean'></label>
+                <br>
+                Variance : <label id='variance'></label>
+                <br>
+                SD : <label id='sd'></label>
+                <br>
+                MSE : <label id='mse'></label>
+            </font>
+            <br>
+            <button type="button" id="image" class="btn btn-danger" onclick="Data2PNG()">Image export</button>
+            <button type="button" id="csv" class="btn btn-danger" onclick="Data2CSV()">CSV export</button>
+            <br>
+            <br>
+            <span style="font-size: x-large;">Notifications</span>
+
+            <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="device-notification-tab" data-toggle="pill"
+                        href="#device-notification" role="tab" aria-controls="device-notification"
+                        aria-selected="true">Device</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="household-notification-tab" data-toggle="pill"
+                        href="#household-notification" role="tab" aria-controls="household-notification"
+                        aria-selected="false">Household</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="house-notification-tab" data-toggle="pill" href="#house-notification"
+                        role="tab" aria-controls="house-notification" aria-selected="false">House</a>
+                </li>
+            </ul>
+            <div class="tab-content" id="pills-tabContent">
+                <div class="tab-pane fade show active" id="device-notification" role="tabpanel"
+                    aria-labelledby="device-notification-tab">
+                    <div class="list-group" id="device_notification_list" style="height: 80%;">
+                    </div>
+                    <div id="more_device_notification" class="more_notification">
+                        Load more
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="household-notification" role="tabpanel"
+                    aria-labelledby="household-notification-tab">
+                    <div class="list-group" id="household_notification_list" style="height: 80%;">
+                    </div>
+                    <div id="more_household_notification" class="more_notification">
+                        Load more
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="house-notification" role="tabpanel"
+                    aria-labelledby="house-notification-tab">
+                    <div class="list-group" id="house_notification_list" style="height: 80%;">
+                    </div>
+                    <div id="more_house_notification" class="more_notification">
+                        Load more
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

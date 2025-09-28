@@ -1,0 +1,17 @@
+# Telling the Supervisor where the Zookeeper is.
+storm.zookeeper.servers:
+  - "zookeeper"
+
+# The worker nodes need to know which machine(s) are the candidate of master
+# in order to download the topology jars.
+nimbus.seeds : ["nimbus"]
+
+# For each Supervisor, we configure how many workers run on that machine. 
+# Each worker uses a single port for receiving messages, and this setting 
+# defines which ports are open for use. We define four ports here, so Storm will 
+# allocate up to four workers to run on this node.
+supervisor.slots.ports:
+    - 6700
+    - 6701
+    - 6702
+    - 6703

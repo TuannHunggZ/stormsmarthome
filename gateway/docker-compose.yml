@@ -1,0 +1,99 @@
+services:
+  zookeeper:
+    image: zookeeper
+    container_name: zookeeper
+    networks:
+      storm_network:
+    # Add this volume to the zookeeper service in docker-compose.yml
+    volumes:
+      - ./storm/config/zoo.cfg:/apache-zookeeper-3.9.2-bin/conf/zoo.cfg
+    extra_hosts:
+      - "mysql:192.168.1.6"
+
+
+  nimbus:
+    container_name: nimbus
+    image: storm
+    command: sh -c "storm nimbus & storm ui"
+    volumes:
+      - ./storm/config/storm-nimbus.yaml:/conf/storm.yaml
+      - ./target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar:/target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar
+    ports:
+      - 8081:8081
+    networks:
+      storm_network:
+    extra_hosts:
+      - "mysql:192.168.1.6"
+
+
+  supervisor:
+    image: storm
+    container_name: supervisor
+    command: storm supervisor
+    volumes:
+      - ./storm/config/storm-supervisor.yaml:/conf/storm.yaml
+    networks:
+      storm_network:
+    extra_hosts:
+      - "mysql:192.168.1.6"
+  
+  supervisor2:
+    image: storm
+    container_name: supervisor2
+    command: storm supervisor
+    volumes:
+      - ./storm/config/storm-supervisor.yaml:/conf/storm.yaml
+    networks:
+      storm_network:
+    extra_hosts:
+      - "mysql:192.168.1.6"
+
+  mqtt-broker:
+    image: mr4x2/mqtt-broker-iotdata:v1
+    container_name: mqtt-broker
+    networks:
+      storm_network:
+    ports:
+      - 1883:1883
+    extra_hosts:
+      - "mysql:192.168.1.6"
+
+  webapp:
+    image: duongtm3102/iot-data-api:v1
+    container_name: iot-data-api
+    networks:
+      storm_network:
+    ports:
+      - 9000:9000
+    volumes:
+      - ./webapp/cred.json:/opt/app/cred.json
+    restart: always
+    extra_hosts:
+      - "mysql:192.168.1.6"
+
+  storm-exporter:
+    image: mr4x2/stormexporter:v1.2.2
+    container_name: storm-exporter
+    environment:
+      - STORM_UI_HOST=nimbus:8081
+      - PORT_EXPOSE=8082
+      - REFRESH_RATE=5
+    networks:
+      storm_network:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://nimbus:8081/api/v1/cluster/summary"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    ports:
+      - 8082:8082
+    depends_on:
+      - nimbus
+    extra_hosts:
+      - "mysql:192.168.1.6"
+    # TODO: update health check with depend on to avoid fail in run container
+
+networks:
+  storm_network:
+    driver: bridge

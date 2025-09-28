@@ -1,0 +1,26 @@
+database.clean: false
+database.updateInterval: 60
+storm.topologyName: "iot-smarthome"
+spout.brokerURL: "tcp://mqtt-broker:1883"
+spout.topicList: ["iot-data"]
+spout.triggerInterval: 1000
+iot analytics.windowList: [1, 5, 10, 15, 20, 30, 60, 120]
+
+notification.publishMQTT: true
+notification.brokerURL: "tcp://mqtt-broker:1883"
+notification.topicPrefix: ""
+
+notification.house.logGap: 20
+notification.house.checkMin: false
+notification.house.checkAvg: false
+notification.house.checkMax: true
+
+notification.household.logGap: 20
+notification.household.checkMin: false
+notification.household.checkAvg: false
+notification.household.checkMax: true
+
+notification.device.logGap: 20
+notification.device.checkMin: false
+notification.device.checkAvg: false
+notification.device.checkMax: true

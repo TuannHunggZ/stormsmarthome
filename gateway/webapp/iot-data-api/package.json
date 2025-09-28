@@ -1,0 +1,30 @@
+{
+  "name": "iot-data-api",
+  "version": "1.0.0",
+  "description": "API to query IOT-Data form DB",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "nodemon index.js",
+    "start": "pm2 start index.js --watch --name iot-data-api --no-daemon",
+    "stop": "pm2 stop iot-data-api",
+    "logs": "pm2 logs iot-data-api"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/hiiamlala/iot-data-api.git"
+  },
+  "author": "hiiamlala",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://gitlab.com/hiiamlala/iot-data-api/issues"
+  },
+  "homepage": "https://gitlab.com/hiiamlala/iot-data-api#readme",
+  "dependencies": {
+    "express": "^4.17.1",
+    "mqtt": "^4.2.4",
+    "mysql": "^2.18.1",
+    "pm2": "^5.4.1",
+    "socket.io": "^3.0.0"
+  }
+}
