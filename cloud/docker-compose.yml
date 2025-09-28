@@ -20,4 +20,4 @@ services:
     build: ./Dockerfile
     container_name: backend
     extra_hosts:
-      - "mysql:192.168.1.6"
+      - "mqtt-broker:192.168.1.6"
