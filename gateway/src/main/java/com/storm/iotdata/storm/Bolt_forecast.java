@@ -59,7 +59,7 @@ public class Bolt_forecast extends BaseRichBolt {
     public void execute(Tuple input) {
         try{
             if(input.getSourceStreamId().equals("trigger")) {
-                sendForecastToBackend("http://192.168.1.12:8080/forecast");
+                sendForecastToBackend("http://mysql:8080/forecast");
                 _collector.ack(input);
             } else if(input.getSourceStreamId().equals("data")) {
                 if(input.getValueByField("type").equals(HouseData.class)){
