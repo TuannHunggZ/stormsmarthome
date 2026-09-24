@@ -1,5 +1,6 @@
 package com.storm.iotdata.storm;
 
+import com.storm.iotdata.functions.DB_store;
 import com.storm.iotdata.models.PlugData;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -9,73 +10,56 @@ import org.apache.storm.tuple.Tuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Stack;
 
 /**
- * Bolt that aggregates plug values for one configured window size, persists
- * completed slices in PostgreSQL, and detects plug and house anomalies.
+ * Bolt_average gom du lieu plug theo tung timeslice de tinh trung binh,
+ * luu PostgreSQL va phat hien bat thuong theo co che rolling statistic.
  *
- * Data is accumulated from the matching window stream. A punctuation event
- * closes the currently accumulated slices and triggers persistence and anomaly
- * detection. Monitoring and throughput reporting are intentionally excluded.
+ * Vai tro:
+ * - Nhan du lieu tu stream `window-*` cua `Bolt_split`.
+ * - Tich luy `value` va `count` cho tung plug trong tung timeslice.
+ * - Khi nhan punctuation, ghi du lieu vao `plug_data` va `house_data`.
+ * - So sanh average hien tai voi min/max/avg lich su cua plug va house.
+ *
+ * Monitoring throughput va cac file log tam thoi khong duoc su dung.
  */
 public class Bolt_average extends BaseRichBolt {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Bolt_average.class);
-
-    private static final String DATA_STREAM_PREFIX = "window-";
+    private static final String WINDOW_STREAM_PREFIX = "window-";
     private static final String PUNCTUATION_STREAM_PREFIX = "punctuation-";
-    private static final String JDBC_URL = "JDBC_URL";
-    private static final String JDBC_USER = "JDBC_USER";
-    private static final String JDBC_PASSWORD = "JDBC_PASSWORD";
-    private static final String ANOMALY_THRESHOLD_PERCENT = "ANOMALY_THRESHOLD_PERCENT";
-    private static final String DEFAULT_JDBC_URL = "jdbc:postgresql://postgresql:5432/iotdata";
-    private static final String DEFAULT_JDBC_USER = "postgres";
-    private static final String DEFAULT_JDBC_PASSWORD = "postgres";
     private static final int DEFAULT_ANOMALY_THRESHOLD_PERCENT = 20;
 
-    private final int windowSizeMinutes;
-    private final Map<String, PlugData> plugDataBySlice;
-    private final Map<PlugKey, RollingStatistic> plugStatistics;
-    private final Map<HouseKey, RollingStatistic> houseStatistics;
-    private final String jdbcUrl;
-    private final String jdbcUser;
-    private final String jdbcPassword;
+    private final Integer gap;
+    private final DB_store dbStore;
+    private final Map<String, PlugData> plugDataList;
+    private final Map<String, RollingStatistic> plugStatistics;
+    private final Map<Integer, RollingStatistic> houseStatistics;
     private final int anomalyThresholdPercent;
     private transient OutputCollector collector;
-    private transient Connection connection;
-    private transient PreparedStatement plugInsertStatement;
-    private transient PreparedStatement houseInsertStatement;
 
     /**
-     * Creates an average bolt for one window size.
+     * Creates an average bolt for one configured window size.
      *
      * @param windowSizeMinutes Window size handled by this bolt, in minutes.
      */
-    public Bolt_average(int windowSizeMinutes) {
-        this.windowSizeMinutes = windowSizeMinutes;
-        this.plugDataBySlice = new HashMap<String, PlugData>();
-        this.plugStatistics = new HashMap<PlugKey, RollingStatistic>();
-        this.houseStatistics = new HashMap<HouseKey, RollingStatistic>();
-        this.jdbcUrl = getSetting(JDBC_URL, DEFAULT_JDBC_URL);
-        this.jdbcUser = getSetting(JDBC_USER, DEFAULT_JDBC_USER);
-        this.jdbcPassword = getSetting(JDBC_PASSWORD, DEFAULT_JDBC_PASSWORD);
+    public Bolt_average(Integer windowSizeMinutes) {
+        this.gap = windowSizeMinutes;
+        this.dbStore = new DB_store();
+        this.plugDataList = new HashMap<String, PlugData>();
+        this.plugStatistics = new HashMap<String, RollingStatistic>();
+        this.houseStatistics = new HashMap<Integer, RollingStatistic>();
         this.anomalyThresholdPercent = getIntegerSetting(
-            ANOMALY_THRESHOLD_PERCENT,
+            "ANOMALY_THRESHOLD_PERCENT",
             DEFAULT_ANOMALY_THRESHOLD_PERCENT
         );
     }
 
     /**
-     * Initializes the PostgreSQL connection and prepared statements.
+     * Opens the PostgreSQL store and prepares the bolt collector.
      *
      * @param stormConf Storm configuration map.
      * @param context Topology context.
@@ -84,67 +68,64 @@ public class Bolt_average extends BaseRichBolt {
     @Override
     public void prepare(Map<String, Object> stormConf, TopologyContext context, OutputCollector collector) {
         this.collector = collector;
-        initializeDatabase();
-        LOGGER.info("Bolt_Average initialized for window {}m", windowSizeMinutes);
+        dbStore.initialize();
+        LOGGER.info("Bolt_Average initialized for window {}m", gap);
     }
 
     /**
-     * Routes data tuples to the accumulator and punctuation tuples to the flush path.
+     * Accumulates window data and flushes it when punctuation arrives.
      *
      * @param tuple Incoming Storm tuple.
      */
     @Override
     public void execute(Tuple tuple) {
-        String sourceStreamId = tuple.getSourceStreamId();
-
         try {
-            if (getDataStreamId().equals(sourceStreamId)) {
-                processData(tuple);
-                collector.ack(tuple);
-            } else if (getPunctuationStreamId().equals(sourceStreamId)) {
+            if (tuple.getSourceStreamId().equals(getPunctuationStreamId())) {
                 processPunctuation(tuple);
                 collector.ack(tuple);
+            } else if (tuple.getSourceStreamId().equals(getWindowStreamId())) {
+                processWindowData(tuple);
+                collector.ack(tuple);
             } else {
-                LOGGER.warn("Received tuple from unsupported stream {}", sourceStreamId);
+                LOGGER.warn("Received tuple from unsupported stream {}", tuple.getSourceStreamId());
                 collector.fail(tuple);
             }
         } catch (Exception exception) {
-            LOGGER.error("Failed to process tuple from stream {}", sourceStreamId, exception);
-            rollbackDatabase(exception);
+            LOGGER.error("Failed to process tuple from stream {}", tuple.getSourceStreamId(), exception);
             collector.fail(tuple);
         }
     }
 
     /**
-     * This bolt is a persistence sink and does not declare output streams.
+     * This bolt persists aggregates directly and does not emit another stream.
      *
      * @param declarer Storm declarer.
      */
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
-        // Persistence and anomaly detection are completed inside this bolt.
+        // Aggregates and anomaly results are handled by this bolt.
     }
 
     /**
-     * Flushes pending resources and clears in-memory state during shutdown.
+     * Closes the database store and clears in-memory state.
      */
     @Override
     public void cleanup() {
-        closeDatabase();
-        plugDataBySlice.clear();
+        dbStore.close();
+        plugDataList.clear();
         plugStatistics.clear();
         houseStatistics.clear();
     }
 
-    private void processData(Tuple tuple) {
-        int houseId = tuple.getIntegerByField("houseId");
-        int householdId = tuple.getIntegerByField("householdId");
-        int plugId = tuple.getIntegerByField("plugId");
+    private void processWindowData(Tuple tuple) {
+        Integer houseId = tuple.getIntegerByField("houseId");
+        Integer householdId = tuple.getIntegerByField("householdId");
+        Integer plugId = tuple.getIntegerByField("plugId");
         String year = tuple.getStringByField("year");
         String month = tuple.getStringByField("month");
         String day = tuple.getStringByField("day");
-        int sliceIndex = tuple.getIntegerByField("sliceIndex");
-        double value = tuple.getDoubleByField("value");
+        Integer sliceIndex = tuple.getIntegerByField("sliceIndex");
+        Double value = tuple.getDoubleByField("value");
 
         PlugData plugData = new PlugData(
             houseId,
@@ -154,125 +135,69 @@ public class Bolt_average extends BaseRichBolt {
             month,
             day,
             sliceIndex,
-            windowSizeMinutes
+            gap
         );
         String uniqueId = plugData.getUniqueId();
-        PlugData accumulatedData = plugDataBySlice.getOrDefault(uniqueId, plugData);
-        plugDataBySlice.put(uniqueId, accumulatedData.increaseValue(value));
-    }
-
-    private void processPunctuation(Tuple tuple) throws SQLException {
-        int punctuationWindowSize = tuple.getIntegerByField("windowSize");
-        long triggerTimestampMillis = tuple.getLongByField("triggerTimestampMillis");
-
-        if (punctuationWindowSize != windowSizeMinutes) {
-            LOGGER.debug(
-                "Ignoring punctuation for window {}m in bolt configured for {}m",
-                punctuationWindowSize,
-                windowSizeMinutes
-            );
-            return;
-        }
-
-        if (plugDataBySlice.isEmpty()) {
-            LOGGER.debug("No accumulated data to flush for window {}m", windowSizeMinutes);
-            return;
-        }
-
-        List<PlugData> completedPlugData = new ArrayList<PlugData>(plugDataBySlice.values());
-        Map<HouseSliceKey, HouseAccumulator> houseAggregates = buildHouseAggregates(completedPlugData);
-
-        persistPlugData(completedPlugData);
-        persistHouseData(houseAggregates);
-        connection.commit();
-
-        for (PlugData plugData : completedPlugData) {
-            updatePlugAnomalyStatistics(plugData, triggerTimestampMillis);
-        }
-        for (Map.Entry<HouseSliceKey, HouseAccumulator> entry : houseAggregates.entrySet()) {
-            updateHouseAnomalyStatistics(entry.getKey(), entry.getValue().average(), triggerTimestampMillis);
-        }
-
-        plugDataBySlice.clear();
-        LOGGER.info(
-            "Flushed {} plug records and {} house records for window {}m",
-            completedPlugData.size(),
-            houseAggregates.size(),
-            windowSizeMinutes
+        plugDataList.put(
+            uniqueId,
+            plugDataList.getOrDefault(uniqueId, plugData).increaseValue(value)
         );
     }
 
-    private Map<HouseSliceKey, HouseAccumulator> buildHouseAggregates(List<PlugData> plugDataList) {
-        Map<HouseSliceKey, HouseAccumulator> houseAggregates = new HashMap<HouseSliceKey, HouseAccumulator>();
+    private void processPunctuation(Tuple tuple) {
+        Integer punctuationWindowSize = tuple.getIntegerByField("windowSize");
+        Long triggerTimestampMillis = tuple.getLongByField("triggerTimestampMillis");
 
-        for (PlugData plugData : plugDataList) {
-            HouseSliceKey key = new HouseSliceKey(
+        if (!gap.equals(punctuationWindowSize)) {
+            LOGGER.debug("Ignoring punctuation for window {}m in bolt configured for {}m", punctuationWindowSize, gap);
+            return;
+        }
+
+        if (plugDataList.isEmpty()) {
+            LOGGER.debug("No accumulated data to flush for window {}m", gap);
+            return;
+        }
+
+        Stack<PlugData> needSave = new Stack<PlugData>();
+        needSave.addAll(plugDataList.values());
+
+        if (!dbStore.pushPlugData(needSave)) {
+            LOGGER.error("Failed to persist {} plug records for window {}m", needSave.size(), gap);
+            return;
+        }
+
+        Map<Integer, HouseAggregate> houseAggregates = new HashMap<Integer, HouseAggregate>();
+        for (PlugData plugData : needSave) {
+            updatePlugAnomaly(plugData, triggerTimestampMillis);
+            HouseAggregate houseAggregate = houseAggregates.getOrDefault(
                 plugData.getHouseId(),
-                plugData.getYear(),
-                plugData.getMonth(),
-                plugData.getDay(),
-                plugData.getSliceIndex(),
-                plugData.getSliceGap()
+                new HouseAggregate()
             );
-            HouseAccumulator accumulator = houseAggregates.computeIfAbsent(
-                key,
-                ignored -> new HouseAccumulator()
-            );
-            accumulator.add(plugData.getAvg());
+            houseAggregate.add(plugData.getAvg());
+            houseAggregates.put(plugData.getHouseId(), houseAggregate);
+        }
+        for (Map.Entry<Integer, HouseAggregate> entry : houseAggregates.entrySet()) {
+            updateHouseAnomaly(entry.getKey(), entry.getValue().average(), triggerTimestampMillis);
         }
 
-        return houseAggregates;
+        plugDataList.clear();
+        LOGGER.info(
+            "Flushed {} plug records and {} house records for window {}m",
+            needSave.size(),
+            houseAggregates.size(),
+            gap
+        );
     }
 
-    private void persistPlugData(List<PlugData> plugDataList) throws SQLException {
-        for (PlugData plugData : plugDataList) {
-            plugInsertStatement.setInt(1, plugData.getHouseId());
-            plugInsertStatement.setInt(2, plugData.getHouseholdId());
-            plugInsertStatement.setInt(3, plugData.getPlugId());
-            plugInsertStatement.setString(4, plugData.getYear());
-            plugInsertStatement.setString(5, plugData.getMonth());
-            plugInsertStatement.setString(6, plugData.getDay());
-            plugInsertStatement.setInt(7, plugData.getSliceGap());
-            plugInsertStatement.setInt(8, plugData.getSliceIndex());
-            plugInsertStatement.setDouble(9, plugData.getValue());
-            plugInsertStatement.setDouble(10, plugData.getCount());
-            plugInsertStatement.setDouble(11, plugData.getAvg());
-            plugInsertStatement.addBatch();
-        }
-        plugInsertStatement.executeBatch();
-        plugInsertStatement.clearBatch();
-    }
-
-    private void persistHouseData(Map<HouseSliceKey, HouseAccumulator> houseAggregates) throws SQLException {
-        for (Map.Entry<HouseSliceKey, HouseAccumulator> entry : houseAggregates.entrySet()) {
-            HouseSliceKey key = entry.getKey();
-            houseInsertStatement.setInt(1, key.houseId);
-            houseInsertStatement.setString(2, key.year);
-            houseInsertStatement.setString(3, key.month);
-            houseInsertStatement.setString(4, key.day);
-            houseInsertStatement.setInt(5, key.sliceGap);
-            houseInsertStatement.setInt(6, key.sliceIndex);
-            houseInsertStatement.setDouble(7, entry.getValue().average());
-            houseInsertStatement.addBatch();
-        }
-        houseInsertStatement.executeBatch();
-        houseInsertStatement.clearBatch();
-    }
-
-    private void updatePlugAnomalyStatistics(PlugData plugData, long triggerTimestampMillis) {
+    private void updatePlugAnomaly(PlugData plugData, long triggerTimestampMillis) {
         double currentAverage = plugData.getAvg();
         if (currentAverage == 0.0d) {
             return;
         }
 
-        PlugKey key = new PlugKey(plugData.getHouseId(), plugData.getHouseholdId(), plugData.getPlugId());
-        RollingStatistic statistic = plugStatistics.computeIfAbsent(key, ignored -> new RollingStatistic());
-        if (statistic.isEmpty()) {
-            statistic.initialize(currentAverage);
-            return;
-        }
-
-        checkAnomalies(
+        String plugId = plugData.getPlugUniqueId();
+        RollingStatistic statistic = plugStatistics.getOrDefault(plugId, new RollingStatistic());
+        checkAnomaly(
             "PLUG",
             plugData.getHouseId(),
             plugData.getHouseholdId(),
@@ -281,34 +206,30 @@ public class Bolt_average extends BaseRichBolt {
             statistic,
             triggerTimestampMillis
         );
-        statistic.update(currentAverage);
+        statistic.addValue(currentAverage);
+        plugStatistics.put(plugId, statistic);
     }
 
-    private void updateHouseAnomalyStatistics(HouseSliceKey key, double currentAverage, long triggerTimestampMillis) {
+    private void updateHouseAnomaly(int houseId, double currentAverage, long triggerTimestampMillis) {
         if (currentAverage == 0.0d) {
             return;
         }
 
-        HouseKey houseKey = new HouseKey(key.houseId);
-        RollingStatistic statistic = houseStatistics.computeIfAbsent(houseKey, ignored -> new RollingStatistic());
-        if (statistic.isEmpty()) {
-            statistic.initialize(currentAverage);
-            return;
-        }
-
-        checkAnomalies(
+        RollingStatistic statistic = houseStatistics.getOrDefault(houseId, new RollingStatistic());
+        checkAnomaly(
             "HOUSE",
-            key.houseId,
+            houseId,
             null,
             null,
             currentAverage,
             statistic,
             triggerTimestampMillis
         );
-        statistic.update(currentAverage);
+        statistic.addValue(currentAverage);
+        houseStatistics.put(houseId, statistic);
     }
 
-    private void checkAnomalies(
+    private void checkAnomaly(
         String entityType,
         int houseId,
         Integer householdId,
@@ -317,8 +238,11 @@ public class Bolt_average extends BaseRichBolt {
         RollingStatistic statistic,
         long triggerTimestampMillis
     ) {
-        double threshold = anomalyThresholdPercent / 100.0d;
+        if (statistic.count == 0L) {
+            return;
+        }
 
+        double threshold = anomalyThresholdPercent / 100.0d;
         if ((currentAverage - statistic.max) >= statistic.max * threshold) {
             logAnomaly("MAX", entityType, houseId, householdId, plugId, currentAverage, statistic, triggerTimestampMillis);
         }
@@ -344,7 +268,7 @@ public class Bolt_average extends BaseRichBolt {
             "{} anomaly detected: type={} windowSize={} houseId={} householdId={} plugId={} value={} avg={} min={} max={} triggerTimestampMillis={} thresholdPercent={}",
             entityType,
             anomalyType,
-            windowSizeMinutes,
+            gap,
             houseId,
             householdId,
             plugId,
@@ -357,183 +281,27 @@ public class Bolt_average extends BaseRichBolt {
         );
     }
 
-    private void initializeDatabase() {
-        String plugInsertSql = "INSERT INTO plug_data "
-            + "(house_id, household_id, plug_id, year, month, day, slice_gap, slice_index, value, count, avg) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            + "ON CONFLICT (house_id, household_id, plug_id, year, month, day, slice_gap, slice_index) "
-            + "DO UPDATE SET value = EXCLUDED.value, count = EXCLUDED.count, avg = EXCLUDED.avg";
-        String houseInsertSql = "INSERT INTO house_data "
-            + "(house_id, year, month, day, slice_gap, slice_index, avg) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?) "
-            + "ON CONFLICT (house_id, year, month, day, slice_gap, slice_index) "
-            + "DO UPDATE SET avg = EXCLUDED.avg";
-
-        try {
-            connection = DriverManager.getConnection(jdbcUrl, jdbcUser, jdbcPassword);
-            connection.setAutoCommit(false);
-            plugInsertStatement = connection.prepareStatement(plugInsertSql);
-            houseInsertStatement = connection.prepareStatement(houseInsertSql);
-            LOGGER.info("Connected to PostgreSQL at {}", jdbcUrl);
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Unable to initialize PostgreSQL connection", exception);
-        }
-    }
-
-    private void closeDatabase() {
-        try {
-            if (plugInsertStatement != null) {
-                plugInsertStatement.close();
-            }
-            if (houseInsertStatement != null) {
-                houseInsertStatement.close();
-            }
-            if (connection != null) {
-                connection.close();
-            }
-            LOGGER.info("Closed PostgreSQL resources successfully");
-        } catch (SQLException exception) {
-            LOGGER.warn("Failed to close PostgreSQL resources cleanly", exception);
-        }
-    }
-
-    private void rollbackDatabase(Exception exception) {
-        if (connection == null) {
-            return;
-        }
-
-        try {
-            connection.rollback();
-            LOGGER.warn("Rolled back PostgreSQL transaction after processing failure", exception);
-        } catch (SQLException rollbackException) {
-            LOGGER.error("Failed to roll back PostgreSQL transaction", rollbackException);
-        }
-    }
-
-    private String getDataStreamId() {
-        return DATA_STREAM_PREFIX + windowSizeMinutes + "m";
+    private String getWindowStreamId() {
+        return WINDOW_STREAM_PREFIX + gap + "m";
     }
 
     private String getPunctuationStreamId() {
-        return PUNCTUATION_STREAM_PREFIX + windowSizeMinutes + "m";
-    }
-
-    private static String getSetting(String name, String defaultValue) {
-        String systemValue = System.getProperty(name);
-        if (systemValue != null && !systemValue.trim().isEmpty()) {
-            return systemValue;
-        }
-        String environmentValue = System.getenv(name);
-        return environmentValue == null || environmentValue.trim().isEmpty() ? defaultValue : environmentValue;
+        return PUNCTUATION_STREAM_PREFIX + gap + "m";
     }
 
     private static int getIntegerSetting(String name, int defaultValue) {
+        String value = System.getProperty(name);
+        if (value == null || value.trim().isEmpty()) {
+            value = System.getenv(name);
+        }
         try {
-            return Integer.parseInt(getSetting(name, String.valueOf(defaultValue)));
+            return value == null ? defaultValue : Integer.parseInt(value);
         } catch (NumberFormatException exception) {
             return defaultValue;
         }
     }
 
-    private static final class PlugKey {
-
-        private final int houseId;
-        private final int householdId;
-        private final int plugId;
-
-        private PlugKey(int houseId, int householdId, int plugId) {
-            this.houseId = houseId;
-            this.householdId = householdId;
-            this.plugId = plugId;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof PlugKey)) {
-                return false;
-            }
-            PlugKey plugKey = (PlugKey) other;
-            return houseId == plugKey.houseId
-                && householdId == plugKey.householdId
-                && plugId == plugKey.plugId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(houseId, householdId, plugId);
-        }
-    }
-
-    private static final class HouseKey {
-
-        private final int houseId;
-
-        private HouseKey(int houseId) {
-            this.houseId = houseId;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof HouseKey)) {
-                return false;
-            }
-            return houseId == ((HouseKey) other).houseId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(houseId);
-        }
-    }
-
-    private static final class HouseSliceKey {
-
-        private final int houseId;
-        private final String year;
-        private final String month;
-        private final String day;
-        private final int sliceIndex;
-        private final int sliceGap;
-
-        private HouseSliceKey(int houseId, String year, String month, String day, int sliceIndex, int sliceGap) {
-            this.houseId = houseId;
-            this.year = year;
-            this.month = month;
-            this.day = day;
-            this.sliceIndex = sliceIndex;
-            this.sliceGap = sliceGap;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof HouseSliceKey)) {
-                return false;
-            }
-            HouseSliceKey key = (HouseSliceKey) other;
-            return houseId == key.houseId
-                && sliceIndex == key.sliceIndex
-                && sliceGap == key.sliceGap
-                && Objects.equals(year, key.year)
-                && Objects.equals(month, key.month)
-                && Objects.equals(day, key.day);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(houseId, year, month, day, sliceIndex, sliceGap);
-        }
-    }
-
-    private static final class HouseAccumulator {
+    private static final class HouseAggregate {
 
         private double total;
         private int count;
@@ -555,18 +323,17 @@ public class Bolt_average extends BaseRichBolt {
         private double average;
         private long count;
 
-        private boolean isEmpty() {
-            return count == 0L;
-        }
-
-        private void initialize(double value) {
-            min = value;
-            max = value;
-            average = value;
-            count = 1L;
-        }
-
-        private void update(double value) {
+        private void addValue(double value) {
+            if (value == 0.0d) {
+                return;
+            }
+            if (count == 0L) {
+                min = value;
+                max = value;
+                average = value;
+                count = 1L;
+                return;
+            }
             long updatedCount = count + 1L;
             average = (average * count + value) / updatedCount;
             count = updatedCount;
