@@ -6,3 +6,6 @@ com/storm/iotdata/storm/Bolt_split.class
 com/storm/iotdata/storm/Spout_data$1.class
 com/storm/iotdata/models/StormConfig.class
 com/storm/iotdata/MainTopo.class
+com/storm/iotdata/storm/Bolt_average.class
+com/storm/iotdata/models/TimeSlice.class
+com/storm/iotdata/models/PlugData.class

@@ -93,7 +93,7 @@ public class Bolt_split extends BaseRichBolt {
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
         for (Integer window : StormConfig.getTimeSliceMinutes()) {
-            declarer.declareStream(WINDOW_STREAM_PREFIX + window, new Fields("houseId", "householdId", "plugId", "year", "month", "day", "sliceIndex", "value"));
+            declarer.declareStream(WINDOW_STREAM_PREFIX + window + "m", new Fields("houseId", "householdId", "plugId", "year", "month", "day", "sliceIndex", "value"));
             declarer.declareStream(PUNCTUATION_STREAM_PREFIX + window + "m", new Fields("triggerTimestampMillis"));
         }
     }

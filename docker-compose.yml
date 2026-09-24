@@ -1,0 +1,93 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt-broker
+    networks:
+      storm_network:
+    ports:
+      - 1883:1883
+    volumes:
+      - ./mqtt-broker/mosquitto.conf:/etc/mosquitto/mosquitto.conf:ro
+    entrypoint: ["mosquitto", "-c", "/etc/mosquitto/mosquitto.conf"]
+
+  postgresql:
+    image: postgres:15.3-alpine
+    container_name: postgres
+    networks:
+      storm_network:
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: iotdata
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgresql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis
+    hostname: redis
+    command: redis-server --save "" --appendonly no
+    ports:
+      - 6379:6379
+    networks:
+      storm_network:
+    restart: always
+
+  zookeeper:
+    image: zookeeper:3.8.5
+    container_name: zookeeper
+    hostname: zookeeper
+    networks:
+      storm_network:
+    volumes:
+      - ./storm-config/zoo.cfg:/conf/zoo.cfg
+
+  nimbus:
+    image: storm:2.5.0
+    container_name: nimbus
+    hostname: nimbus
+    command: sh -c "storm nimbus & storm ui"
+    volumes:
+      - ./storm-config/nimbus.yaml:/conf/storm.yaml
+      - ./storm-topology/target/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar:/apache-storm-2.5.0/Storm-IOTdata-1.0-SNAPSHOT-jar-with-dependencies.jar
+    ports:
+      - 8080:8080
+    restart: always
+    networks:
+      storm_network:
+    depends_on:
+      - zookeeper
+
+  supervisor1:
+    image: storm:2.5.0
+    container_name: supervisor1
+    hostname: supervisor1
+    command: storm supervisor
+    depends_on:
+      - nimbus
+      - zookeeper
+    restart: always
+    volumes:
+      - ./storm-config/supervisor.yaml:/conf/storm.yaml
+    networks:
+      storm_network:
+
+  supervisor2:
+    image: storm:2.5.0
+    container_name: supervisor2
+    hostname: supervisor2
+    command: storm supervisor
+    depends_on:
+      - nimbus
+      - zookeeper
+    restart: always
+    volumes:
+      - ./storm-config/supervisor.yaml:/conf/storm.yaml
+    networks:
+      storm_network:
+
+networks:
+  storm_network:
+    driver: bridge
