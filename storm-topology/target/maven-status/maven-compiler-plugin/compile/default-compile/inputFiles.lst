@@ -1,5 +1,7 @@
+/home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/PlugProp.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/storm/Bolt_average.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/StormConfig.java
+/home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/RedisAnomalyPublisher.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/TimeSlice.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/PlugData.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/storm/Bolt_split.java

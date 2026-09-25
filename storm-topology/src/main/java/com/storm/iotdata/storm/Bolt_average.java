@@ -2,6 +2,7 @@ package com.storm.iotdata.storm;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Stack;
 
@@ -17,6 +18,9 @@ import org.slf4j.LoggerFactory;
 
 import com.storm.iotdata.functions.DB_store;
 import com.storm.iotdata.models.PlugData;
+import com.storm.iotdata.models.PlugProp;
+import com.storm.iotdata.models.RedisAnomalyPublisher;
+import com.storm.iotdata.models.StormConfig;
 
 /**
  * Storm bolt that aggregates plug data by window and time slice.
@@ -29,6 +33,12 @@ public class Bolt_average extends BaseRichBolt {
 
     private final Integer windowSizeMinutes;
     private final Map<String, PlugData> plugDataList;
+    private final Map<String, PlugProp> plugPropList;
+    private final int anomalyThresholdPercent;
+    private final boolean plugCheckMax;
+    private final boolean plugCheckAvg;
+    private final boolean plugCheckMin;
+    private transient RedisAnomalyPublisher redisPublisher;
     private transient OutputCollector collector;
 
     /**
@@ -39,11 +49,18 @@ public class Bolt_average extends BaseRichBolt {
     public Bolt_average(int windowSizeMinutes) {
         this.windowSizeMinutes = windowSizeMinutes;
         this.plugDataList = new HashMap<String, PlugData>();
+        this.plugPropList = new HashMap<String, PlugProp>();
+        this.anomalyThresholdPercent = StormConfig.getAnomalyThresholdPercent();
+        this.plugCheckMax = StormConfig.isPlugCheckMax();
+        this.plugCheckAvg = StormConfig.isPlugCheckAvg();
+        this.plugCheckMin = StormConfig.isPlugCheckMin();
     }
 
     @Override
 	public void prepare(Map<String, Object> stormConf, TopologyContext context, OutputCollector collector) {
 		this.collector = collector;
+        this.redisPublisher = new RedisAnomalyPublisher();
+        this.redisPublisher.initialize();
 		LOGGER.info("Bolt_Average initialized for window {}m", windowSizeMinutes);
 	}
 
@@ -80,7 +97,11 @@ public class Bolt_average extends BaseRichBolt {
     @Override
     public void cleanup() {
 		LOGGER.info("Cleaning up Bolt_Average for window {}m", windowSizeMinutes);
+        if (redisPublisher != null) {
+            redisPublisher.close();
+        }
         plugDataList.clear();
+        plugPropList.clear();
     }
 
     private void processWindowData(Tuple tuple) {
@@ -125,6 +146,7 @@ public class Bolt_average extends BaseRichBolt {
 
         if (DB_store.pushPlugData(needSave, new File("./tmp/plugData2db-" + windowSizeMinutes + ".lck"))) {
             for (PlugData plugData : needSave) {
+                updatePlugAnomaly(plugData, triggerTimestampMillis);
                 plugDataList.get(plugData.getUniqueId()).save();
             }
         }
@@ -135,5 +157,90 @@ public class Bolt_average extends BaseRichBolt {
 
         collector.emit("punctuation-" + windowSizeMinutes + "m", tuple, new Values(triggerTimestampMillis));
 		LOGGER.info("Forwarded punctuation for window {}m", windowSizeMinutes);
+    }
+
+    private void updatePlugAnomaly(PlugData plugData, long triggerTimestampMillis) {
+        double currentAverage = plugData.getAvg();
+        if (currentAverage == 0.0d) {
+            LOGGER.debug("Skipping anomaly statistics for zero plug average");
+            return;
+        }
+
+        String plugUniqueId = plugData.getPlugUniqueId() + "-" + windowSizeMinutes;
+        PlugProp plugProp = plugPropList.getOrDefault(
+            plugUniqueId,
+            new PlugProp(
+                plugData.getHouseId(),
+                plugData.getHouseholdId(),
+                plugData.getPlugId(),
+                windowSizeMinutes
+            )
+        );
+
+        if (plugProp.getCount() > 0.0d) {
+            checkAnomalies(plugData, currentAverage, plugProp, triggerTimestampMillis);
+        }
+
+        plugProp.addValue(currentAverage);
+        plugPropList.put(plugUniqueId, plugProp);
+    }
+
+    private void checkAnomalies(
+        PlugData plugData,
+        double currentAverage,
+        PlugProp plugProp,
+        long triggerTimestampMillis
+    ) {
+        double threshold = anomalyThresholdPercent / 100.0d;
+
+        if (plugCheckMax && plugProp.getMax() != 0.0d
+            && (currentAverage - plugProp.getMax()) >= plugProp.getMax() * threshold) {
+            publishAnomaly("MAX", plugData, currentAverage, plugProp, triggerTimestampMillis);
+        }
+        if (plugCheckAvg && plugProp.getAvg() != 0.0d
+            && (currentAverage - plugProp.getAvg()) >= plugProp.getAvg() * threshold) {
+            publishAnomaly("AVG", plugData, currentAverage, plugProp, triggerTimestampMillis);
+        }
+        if (plugCheckMin && plugProp.getMin() != 0.0d
+            && (plugProp.getMin() - currentAverage) >= plugProp.getMin() * threshold) {
+            publishAnomaly("MIN", plugData, currentAverage, plugProp, triggerTimestampMillis);
+        }
+    }
+
+    private void publishAnomaly(
+        String anomalyType,
+        PlugData plugData,
+        double currentAverage,
+        PlugProp plugProp,
+        long triggerTimestampMillis
+    ) {
+        Map<String, Object> event = new LinkedHashMap<String, Object>();
+        event.put("type", "PLUG_ANOMALY");
+        event.put("anomalyType", anomalyType);
+        event.put("windowSize", windowSizeMinutes);
+        event.put("timestamp", triggerTimestampMillis);
+        event.put("houseId", plugData.getHouseId());
+        event.put("householdId", plugData.getHouseholdId());
+        event.put("plugId", plugData.getPlugId());
+        event.put("value", currentAverage);
+        event.put("avg", plugProp.getAvg());
+        event.put("min", plugProp.getMin());
+        event.put("max", plugProp.getMax());
+        event.put("anomalyThresholdPercent", anomalyThresholdPercent);
+
+        redisPublisher.publish(StormConfig.getPlugAnomalyChannel(), event);
+        LOGGER.warn(
+            "Plug anomaly detected: type={} windowSize={} houseId={} householdId={} plugId={} value={} avg={} min={} max={} triggerTimestampMillis={}",
+            anomalyType,
+            windowSizeMinutes,
+            plugData.getHouseId(),
+            plugData.getHouseholdId(),
+            plugData.getPlugId(),
+            currentAverage,
+            plugProp.getAvg(),
+            plugProp.getMin(),
+            plugProp.getMax(),
+            triggerTimestampMillis
+        );
     }
 }

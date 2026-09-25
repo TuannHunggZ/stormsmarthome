@@ -41,6 +41,54 @@ public class StormConfig {
     }
 
     // =====================================================================
+    // REDIS ANOMALY PUBLISHER
+    // =====================================================================
+    // Redis host used for anomaly events.
+    private static final String redisHost = "redis";
+
+    // Redis port used for anomaly events.
+    private static final int redisPort = 6379;
+
+    // Redis Pub/Sub channel for plug anomaly events.
+    private static final String plugAnomalyChannel = "anomaly:plug";
+
+    // Percentage threshold used by plug anomaly detection.
+    private static final int anomalyThresholdPercent = 20;
+
+    // Enable max, average and min comparisons for plug anomalies.
+    private static final boolean plugCheckMax = true;
+    private static final boolean plugCheckAvg = true;
+    private static final boolean plugCheckMin = true;
+
+    public static String getRedisHost() {
+        return redisHost;
+    }
+
+    public static int getRedisPort() {
+        return redisPort;
+    }
+
+    public static String getPlugAnomalyChannel() {
+        return plugAnomalyChannel;
+    }
+
+    public static int getAnomalyThresholdPercent() {
+        return anomalyThresholdPercent;
+    }
+
+    public static boolean isPlugCheckMax() {
+        return plugCheckMax;
+    }
+
+    public static boolean isPlugCheckAvg() {
+        return plugCheckAvg;
+    }
+
+    public static boolean isPlugCheckMin() {
+        return plugCheckMin;
+    }
+
+    // =====================================================================
     // SPOUT-DATA
     // =====================================================================
     // MQTT broker URI that the spout connects to.
