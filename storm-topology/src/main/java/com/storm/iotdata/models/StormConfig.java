@@ -16,6 +16,30 @@ public class StormConfig {
         return timeSliceMinutes;
     }
 
+        // =====================================================================
+    // DATABASE CONFIGURATION
+    // =====================================================================
+    // JDBC URL for PostgreSQL.
+    private static final String jdbcUrl = "jdbc:postgresql://postgresql:5432/iotdata";
+
+    // PostgreSQL username.
+    private static final String jdbcUser = "postgres";
+
+    // PostgreSQL password.
+    private static final String jdbcPassword = "postgres";
+
+    public static String getJdbcUrl() {
+        return jdbcUrl;
+    }
+
+    public static String getJdbcUser() {
+        return jdbcUser;
+    }
+
+    public static String getJdbcPassword() {
+        return jdbcPassword;
+    }
+
     // =====================================================================
     // SPOUT-DATA
     // =====================================================================

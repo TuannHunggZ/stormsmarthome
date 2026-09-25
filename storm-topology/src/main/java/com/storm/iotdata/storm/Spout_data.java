@@ -133,7 +133,7 @@ public class Spout_data extends BaseRichSpout {
 	 * Declares the output fields for the data stream and all punctuation streams.
 	 * Each punctuation tuple contains:
 	 * - windowSize: window size in minutes.
-	 * - timestamp: start timestamp (seconds) of the completed time slice.
+	 * - triggerTimestampMillis: timestamp when the punctuation was emitted, in milliseconds.
 	 *
 	 * @param declarer Storm declarer.
 	 */
@@ -154,7 +154,7 @@ public class Spout_data extends BaseRichSpout {
 		for (Integer timeSlice : timeSliceMinutes) {
 			declarer.declareStream(
 				punctuationStreamIds.get(timeSlice),
-				new Fields(fieldWindowSize, fieldTimestamp, fieldTriggerTimestampMillis)
+				new Fields(fieldWindowSize, fieldTriggerTimestampMillis)
 			);
 		}
 	}

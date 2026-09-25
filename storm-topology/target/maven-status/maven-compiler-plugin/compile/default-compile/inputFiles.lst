@@ -3,5 +3,6 @@
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/TimeSlice.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/models/PlugData.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/storm/Bolt_split.java
+/home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/functions/DB_store.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/storm/Spout_data.java
 /home/tuanhung/stormsmarthome-new/storm-topology/src/main/java/com/storm/iotdata/MainTopo.java

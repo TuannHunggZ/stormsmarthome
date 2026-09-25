@@ -39,6 +39,7 @@ public class Bolt_split extends BaseRichBolt {
     @Override
 	public void prepare(Map<String, Object> stormConf, TopologyContext context, OutputCollector collector) {
 		this.collector = collector;
+        LOGGER.info("Bolt_Split initialized");
 	}
 
     /**
