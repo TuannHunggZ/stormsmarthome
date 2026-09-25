@@ -34,7 +34,7 @@ public class MainTopo {
         splitBolt.shuffleGrouping("spout-data", "data");
 
         for (Integer windowSize : StormConfig.getTimeSliceMinutes()) {
-            splitBolt.shuffleGrouping("bolt-split", "punctuation-" + windowSize + "m");
+            splitBolt.shuffleGrouping("spout-data", "punctuation-" + windowSize + "m");
 
             String boltId = "bolt-average-" + windowSize + "m";
             BoltDeclarer boltDeclarer = builder.setBolt(boltId, new Bolt_average(windowSize), 1);

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Storm Smart Home Alerts</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Smart Home Monitoring</p>
+          <h1>Anomaly Detection</h1>
+          <p class="lede">Real-time anomaly detection and device activity monitoring.</p>
+        </div>
+        <div class="status-card">
+          <p class="status-label">Live connection</p>
+          <span id="connectionStatus" class="status disconnected">Disconnected</span>
+          <p id="connectionHint" class="status-hint">Attempting to reconnect...</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Active Alerts</h2>
+          <p id="alertCount">0 alerts</p>
+        </div>
+        <div id="alertList" class="alert-list"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

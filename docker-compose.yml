@@ -88,6 +88,25 @@ services:
     networks:
       storm_network:
 
+  webapp:
+    build:
+      context: ./webapp
+    container_name: webapp
+    hostname: webapp
+    environment:
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PLUG_CHANNEL=anomaly:plug
+      - REDIS_HOUSE_CHANNEL=anomaly:house
+    ports:
+      - 3001:3000
+    networks:
+      storm_network:
+    depends_on:
+      - redis
+    restart: always
+
 networks:
   storm_network:
     driver: bridge
